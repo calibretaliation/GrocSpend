@@ -1,0 +1,7 @@
+{
+  "name": "Smart Spend Tracker",
+  "description": "A mobile-first PWA for tracking grocery expenses with AI OCR, unit conversion, and spending analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
