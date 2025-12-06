@@ -17,17 +17,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView }
   ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50">
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto no-scrollbar relative">
-        <div className="max-w-2xl mx-auto h-full bg-white shadow-xl min-h-screen">
+      <main className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="mx-auto w-full max-w-2xl bg-white pb-24 shadow-xl">
           {children}
         </div>
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="bg-white border-t border-slate-200 safe-area-pb z-50">
-        <div className="max-w-2xl mx-auto flex justify-around">
+      <nav className="safe-area-pb sticky bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white pb-1 shadow-[0_-6px_18px_rgba(15,23,42,0.08)]">
+        <div className="mx-auto flex max-w-2xl justify-around">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.view;
