@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomUUID } from "crypto";
-import { query, withTransaction } from "../../lib/db";
-import { requireAuth } from "../../lib/auth";
+import { query, withTransaction } from "../../lib/db.js";
+import { requireAuth } from "../../lib/auth.js";
 
 const normalizeNumber = (value: unknown, fallback = 0) => {
   if (typeof value === "number") return value;

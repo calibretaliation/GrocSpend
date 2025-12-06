@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "../../lib/db";
-import { createSession, verifyPassword } from "../../lib/auth";
+import { query } from "../../lib/db.js";
+import { createSession, verifyPassword } from "../../lib/auth.js";
 
 export default async function handler(
   req: VercelRequest,

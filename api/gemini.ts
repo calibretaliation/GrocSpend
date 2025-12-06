@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
 import { OCRResult } from "../types";
-import { requireAuth } from "../lib/auth";
+import { requireAuth } from "../lib/auth.js";
 
 const SYSTEM_INSTRUCTION = `
 You are an advanced OCR expert for grocery receipts. Your task is to extract data into a strict JSON format by following these steps:
