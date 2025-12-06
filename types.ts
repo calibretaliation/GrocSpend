@@ -23,6 +23,12 @@ export interface Receipt {
   createdAt: number;
 }
 
+export interface User {
+  id: string;
+  username: string;
+  createdAt?: string;
+}
+
 export interface OCRResult {
   merchant: string;
   date: string;

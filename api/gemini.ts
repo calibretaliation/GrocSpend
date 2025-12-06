@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
 import { OCRResult } from "../types";
+import { requireAuth } from "../lib/auth";
 
 const SYSTEM_INSTRUCTION = `
 You are an advanced OCR expert for grocery receipts. Your task is to extract data into a strict JSON format by following these steps:
@@ -55,6 +56,9 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     res.status(405).json({ error: "Method Not Allowed" });

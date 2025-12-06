@@ -1,13 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Save, Plus, Trash2, Loader2, ScanLine, Tag } from 'lucide-react';
+import { Camera, Upload, X, Save, Plus, Trash2, Loader2, ScanLine } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { analyzeReceiptImage } from '../services/geminiService';
 import { OCRResult, Receipt, ReceiptItem } from '../types';
 import { CATEGORIES, PAYMENT_SOURCES } from '../constants';
-import { saveReceipt } from '../services/storageService';
 import { formatDateInputValue } from '../utils/date';
+import { useAuth } from '../contexts/AuthContext';
+import { useReceipts } from '../contexts/ReceiptsContext';
 
 interface ReceiptScannerProps {
     onSaveSuccess: () => void;
@@ -19,8 +20,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [ocrData, setOcrData] = useState<boolean>(false); // Used to toggle form view
     const [error, setError] = useState<string | null>(null);
+
+    const { token, authorizedFetch } = useAuth();
+    const { upsert } = useReceipts();
 
     // Form states
     const [id, setId] = useState<string>('');
@@ -78,12 +83,16 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
 
     const handleAnalyze = async () => {
         if (!imagePreview) return;
+        if (!token) {
+            setError("Please log in to analyze receipts.");
+            return;
+        }
         setIsAnalyzing(true);
         setError(null);
         
         try {
             const base64Data = imagePreview.split(',')[1];
-            const result: OCRResult = await analyzeReceiptImage(base64Data);
+            const result: OCRResult = await analyzeReceiptImage(base64Data, authorizedFetch);
             
             setMerchant(result.merchant || '');
             setTotal(
@@ -134,7 +143,8 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             setOcrData(true); // Switch to form view
 
         } catch (err) {
-            setError("Failed to analyze receipt. Please try again or enter manually.");
+            const message = err instanceof Error ? err.message : null;
+            setError(message || "Failed to analyze receipt. Please try again or enter manually.");
         } finally {
             setIsAnalyzing(false);
         }
@@ -192,7 +202,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
         setCustomTags(customTags.filter(t => t !== tag));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!merchant) {
             setError("Merchant name is required");
             return;
@@ -211,8 +221,21 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             createdAt: initialData ? initialData.createdAt : Date.now()
         };
 
-        saveReceipt(finalReceipt);
-        onSaveSuccess();
+        if (!token) {
+            setError("Please log in to save receipts.");
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            await upsert(finalReceipt);
+            onSaveSuccess();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : null;
+            setError(message || "Failed to save receipt. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const cancelEdit = () => {
@@ -395,9 +418,9 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
 
                     <div className="pt-4 sticky bottom-0 bg-slate-50 pb-4">
                         {error && <p className="text-red-500 text-sm mb-2 text-center">{error}</p>}
-                        <Button fullWidth onClick={handleSave} className="shadow-lg shadow-primary/30">
+                        <Button fullWidth onClick={() => void handleSave()} disabled={isSaving} className="shadow-lg shadow-primary/30">
                             <Save size={18} className="inline mr-2" />
-                            {initialData ? 'Update Receipt' : 'Save Receipt'}
+                            {isSaving ? 'Saving...' : initialData ? 'Update Receipt' : 'Save Receipt'}
                         </Button>
                     </div>
                 </div>
@@ -487,7 +510,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                     )}
 
                     <Button 
-                        onClick={handleAnalyze} 
+                        onClick={() => void handleAnalyze()} 
                         fullWidth 
                         disabled={isAnalyzing}
                         className="shadow-xl"

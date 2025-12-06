@@ -1,9 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
-import { getReceipts, deleteReceipt } from '../services/storageService';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Receipt } from '../types';
 import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Pencil, Tag, StickyNote } from 'lucide-react';
 import { formatReceiptDisplayDate, isValidDate, parseReceiptDate } from '../utils/date';
+import { useReceipts } from '../contexts/ReceiptsContext';
 
 interface HistoryProps {
     onEdit?: (receipt: Receipt) => void;
@@ -13,9 +13,14 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterDate, setFilterDate] = useState('all'); // all, month, week
     const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const { receipts, loading, remove, error } = useReceipts();
+    const [actionError, setActionError] = useState<string | null>(null);
 
-    const receipts = useMemo(() => getReceipts(), [refreshTrigger]);
+    useEffect(() => {
+        if (expandedReceiptId && !receipts.some(r => r.id === expandedReceiptId)) {
+            setExpandedReceiptId(null);
+        }
+    }, [expandedReceiptId, receipts]);
 
     const filteredReceipts = useMemo(() => {
         let filtered = receipts;
@@ -52,11 +57,16 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
         return filtered.sort((a,b) => b.createdAt - a.createdAt);
     }, [receipts, searchTerm, filterDate]);
 
-    const handleDelete = (id: string, e: React.MouseEvent) => {
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if(confirm('Are you sure you want to delete this receipt?')) {
-            deleteReceipt(id);
-            setRefreshTrigger(prev => prev + 1);
+            try {
+                await remove(id);
+                setActionError(null);
+            } catch (err) {
+                const message = err instanceof Error ? err.message : null;
+                setActionError(message || 'Failed to delete receipt. Please try again.');
+            }
         }
     }
 
@@ -98,7 +108,17 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
-                {filteredReceipts.length === 0 ? (
+                {(error || actionError) && (
+                    <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-lg">
+                        {actionError || error}
+                    </div>
+                )}
+                {loading ? (
+                    <div className="text-center text-slate-400 mt-10">
+                        <Calendar className="mx-auto mb-2 opacity-50" size={48} />
+                        <p>Loading receipts…</p>
+                    </div>
+                ) : filteredReceipts.length === 0 ? (
                     <div className="text-center text-slate-400 mt-10">
                         <Calendar className="mx-auto mb-2 opacity-50" size={48} />
                         <p>No receipts found.</p>

@@ -1,9 +1,13 @@
 
+import type { AuthorizedFetch } from "../contexts/AuthContext";
 import { OCRResult } from "../types";
 
-export const analyzeReceiptImage = async (base64Image: string): Promise<OCRResult> => {
+export const analyzeReceiptImage = async (
+  base64Image: string,
+  authFetch: AuthorizedFetch
+): Promise<OCRResult> => {
   try {
-    const response = await fetch("/api/gemini", {
+    const response = await authFetch("/api/gemini", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image: base64Image }),

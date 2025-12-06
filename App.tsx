@@ -5,10 +5,29 @@ import { Dashboard } from './components/Dashboard';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { Converter } from './components/Converter';
 import { History } from './components/History';
+import { useAuth } from './contexts/AuthContext';
+import { AuthScreen } from './components/AuthScreen';
+import { Loader2 } from 'lucide-react';
 
 export default function App() {
+  const { user, loading } = useAuth();
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DASHBOARD);
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-2 text-slate-500">
+          <Loader2 size={20} className="animate-spin" />
+          <span>Loading your workspace…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
 
   const handleScanSuccess = () => {
     setEditingReceipt(null);
