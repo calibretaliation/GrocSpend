@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, Tooltip
 import { getReceipts } from '../services/storageService';
 import { Receipt } from '../types';
 import { CATEGORIES } from '../constants';
+import { formatDateInputValue, formatReceiptDisplayDate, isValidDate, parseReceiptDate } from '../utils/date';
 
 const COLORS = ['#0ea5e9', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
 
@@ -13,7 +14,10 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
   const currentMonthReceipts = useMemo(() => {
     const now = new Date();
     return receipts.filter(r => {
-        const d = new Date(r.date);
+        const d = parseReceiptDate(r.date);
+        if (!isValidDate(d)) {
+            return false;
+        }
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
   }, [receipts]);
@@ -42,7 +46,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
      for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = formatDateInputValue(d);
         const displayDate = `${d.getMonth() + 1}/${d.getDate()}`;
         
         const dayTotal = receipts
@@ -123,7 +127,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
                             <div className="flex-1">
                                 <p className="font-semibold text-slate-800">{receipt.merchant}</p>
                                 <p className="text-xs text-slate-500">
-                                    {new Date(receipt.date).toLocaleDateString()} • {receipt.paymentSource}
+                                    {formatReceiptDisplayDate(receipt.date)} • {receipt.paymentSource}
                                 </p>
                             </div>
                             <div className="text-right">

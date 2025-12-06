@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { getReceipts, deleteReceipt } from '../services/storageService';
 import { Receipt } from '../types';
 import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Pencil, Tag, StickyNote } from 'lucide-react';
+import { formatReceiptDisplayDate, isValidDate, parseReceiptDate } from '../utils/date';
 
 interface HistoryProps {
     onEdit?: (receipt: Receipt) => void;
@@ -23,13 +24,19 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
         const now = new Date();
         if (filterDate === 'month') {
             filtered = filtered.filter(r => {
-                const d = new Date(r.date);
+                const d = parseReceiptDate(r.date);
+                if (!isValidDate(d)) {
+                    return false;
+                }
                 return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
             });
         } else if (filterDate === 'week') {
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            filtered = filtered.filter(r => new Date(r.date) >= oneWeekAgo);
+            filtered = filtered.filter(r => {
+                const d = parseReceiptDate(r.date);
+                return isValidDate(d) && d >= oneWeekAgo;
+            });
         }
 
         // Text Search
@@ -108,7 +115,7 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
                                         <h3 className="font-bold text-slate-800">{r.merchant}</h3>
                                         <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{r.paymentSource}</span>
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-1">{new Date(r.date).toLocaleDateString()} • {r.items.length} items</p>
+                                    <p className="text-xs text-slate-500 mt-1">{formatReceiptDisplayDate(r.date)} • {r.items.length} items</p>
                                 </div>
                                 <div className="text-right flex items-center gap-3">
                                     <div>

@@ -7,6 +7,7 @@ import { analyzeReceiptImage } from '../services/geminiService';
 import { OCRResult, Receipt, ReceiptItem } from '../types';
 import { CATEGORIES, PAYMENT_SOURCES } from '../constants';
 import { saveReceipt } from '../services/storageService';
+import { formatDateInputValue } from '../utils/date';
 
 interface ReceiptScannerProps {
     onSaveSuccess: () => void;
@@ -85,8 +86,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             const result: OCRResult = await analyzeReceiptImage(base64Data);
             
             setMerchant(result.merchant || '');
-            setTotal(result.total?.toString() || '');
-            setDate(result.date || new Date().toISOString().split('T')[0]);
+            setTotal(
+                typeof result.total === 'number'
+                    ? result.total.toFixed(2)
+                    : ''
+            );
+            setDate(result.date || formatDateInputValue(new Date()));
             
             if (result.payment_method && PAYMENT_SOURCES.includes(result.payment_method as any)) {
                 setPaymentSource(result.payment_method!);
@@ -108,6 +113,22 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                 total: item.total_price || 0,
                 category: item.category || 'Groceries'
             })) || [];
+
+            if (result.total) {
+                const itemsSum = newItems.reduce((sum, item) => sum + item.total, 0);
+                const difference = Number((result.total - itemsSum).toFixed(2));
+                if (difference > 0.01) {
+                    newItems.push({
+                        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-tax`,
+                        name: 'Sales Tax',
+                        quantity: 1,
+                        unit: 'ea',
+                        unitPrice: Number(difference.toFixed(2)),
+                        total: Number(difference.toFixed(2)),
+                        category: 'Other'
+                    });
+                }
+            }
             
             setItems(newItems);
             setOcrData(true); // Switch to form view
@@ -120,7 +141,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     };
 
     const handleManualEntry = () => {
-         setDate(new Date().toISOString().split('T')[0]);
+         setDate(formatDateInputValue(new Date()));
          setOcrData(true);
     }
 
