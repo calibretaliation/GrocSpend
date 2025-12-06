@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { query } from "./db";
+import { query } from "./db.js";
 
 const rawTtl = process.env.SESSION_TTL_DAYS;
 const parsedTtl = rawTtl === undefined || rawTtl === "" ? null : Number(rawTtl);
