@@ -282,6 +282,7 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
         const originalImageData = getImage(receipt.id);
         const hasHighlight = Boolean(highlightTerm);
         const normalizedHighlight = highlightTerm?.toLowerCase() ?? '';
+        const saveState = saveStates[receipt.id];
 
         const merchantContent = hasHighlight && receipt.merchant.toLowerCase().includes(normalizedHighlight)
             ? highlightText(receipt.merchant, highlightTerm as string)
@@ -379,6 +380,19 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
                         <p className="text-xs text-slate-500 mt-1">{formatReceiptDisplayDate(receipt.date)} • {receipt.items.length} items</p>
                     </div>
                     <div className="text-right flex items-center gap-3">
+                        {saveState === 'pending' && (
+                            <span className="flex items-center gap-1 text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                                <Loader2 size={12} className="animate-spin" /> Saving…
+                            </span>
+                        )}
+                        {saveState === 'failed' && (
+                            <button
+                                onClick={(e) => handleRetrySave(receipt.id, e)}
+                                className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full border border-red-200 hover:bg-red-200"
+                            >
+                                Save failed – Retry
+                            </button>
+                        )}
                         <div>
                             <p className="font-bold text-slate-900">${receipt.totalAmount.toFixed(2)}</p>
                         </div>
@@ -532,6 +546,21 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
                         <option value="date">Receipt Date</option>
                     </select>
                 </div>
+
+                {(pendingCount > 0 || failedCount > 0) && (
+                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                        {pendingCount > 0 && (
+                            <span className="flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-1 rounded-full">
+                                <Loader2 size={14} className="animate-spin" /> {pendingCount} saving
+                            </span>
+                        )}
+                        {failedCount > 0 && (
+                            <span className="flex items-center gap-1 text-red-600 bg-red-100 px-2 py-1 rounded-full border border-red-200">
+                                {failedCount} save failed
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">

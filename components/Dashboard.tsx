@@ -19,6 +19,13 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
         return { start, end };
     }, []);
 
+    const monthRange = useMemo(() => {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        return { start, end };
+    }, []);
+
     const rangeLabel = useMemo(() => 'Last 7 Days', []);
 
     const recentReceipts = useMemo(() => {
@@ -29,10 +36,18 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
         });
     }, [receipts, recentRange]);
 
-  // Pie Chart Data: Expenses by Category
-    const pieData = useMemo(() => {
-        const map = new Map<string, number>();
-        recentReceipts.forEach(r => {
+    const monthReceipts = useMemo(() => {
+        const { start, end } = monthRange;
+        return receipts.filter(r => {
+            const d = parseReceiptDate(r.date);
+            return isValidDate(d) && d >= start && d <= end;
+        });
+    }, [receipts, monthRange]);
+
+    // Pie Chart Data: Expenses by Category (This Month)
+        const pieData = useMemo(() => {
+                const map = new Map<string, number>();
+                monthReceipts.forEach(r => {
         r.items.forEach(item => {
             const cat = item.category || 'Other';
             map.set(cat, (map.get(cat) || 0) + item.total);
@@ -44,7 +59,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
         }
     });
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-    }, [recentReceipts]);
+        }, [monthReceipts]);
 
   // Bar Chart Data: Daily Spending (Last 7 days)
   const barData = useMemo(() => {
@@ -68,14 +83,29 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
     }, [recentReceipts, recentRange]);
 
     const filteredReceipts = useMemo(() => {
-        return recentReceipts.filter(receipt => {
+        return receipts.filter(receipt => {
+            const receiptDate = parseReceiptDate(receipt.date);
+            if (!isValidDate(receiptDate)) {
+                return false;
+            }
+
+            const inRecentRange = receiptDate >= recentRange.start && receiptDate <= recentRange.end;
+            const inMonthRange = receiptDate >= monthRange.start && receiptDate <= monthRange.end;
+
             const matchesCategory = selectedCategory
                 ? receipt.items.some(item => (item.category || 'Other') === selectedCategory)
                 : true;
             const matchesDay = selectedDay ? receipt.date === selectedDay : true;
-            return matchesCategory && matchesDay;
+
+            const matchesBaseRange = selectedDay
+                ? inRecentRange
+                : selectedCategory
+                    ? inMonthRange
+                    : inRecentRange;
+
+            return matchesBaseRange && matchesCategory && matchesDay;
         });
-    }, [recentReceipts, selectedCategory, selectedDay]);
+    }, [receipts, selectedCategory, selectedDay, recentRange, monthRange]);
 
     const totalSpentInRange = recentReceipts.reduce((sum, r) => sum + r.totalAmount, 0);
 
@@ -118,7 +148,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
             <div className="flex flex-row h-48">
                 {/* Pie Chart */}
                 <div className="flex-1 relative">
-                    <h3 className="text-xs text-slate-500 font-semibold absolute top-0 left-0">By Category</h3>
+                    <h3 className="text-xs text-slate-500 font-semibold absolute top-0 left-0">By Category · This Month</h3>
                     {loading ? (
                         <div className="h-full flex items-center justify-center text-xs text-slate-400">Loading…</div>
                     ) : pieData.length > 0 ? (
@@ -155,7 +185,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
 
                 {/* Bar Chart */}
                 <div className="flex-1 relative border-l border-slate-100 pl-2">
-                    <h3 className="text-xs text-slate-500 font-semibold absolute top-0 left-2">Daily Totals</h3>
+                    <h3 className="text-xs text-slate-500 font-semibold absolute top-0 left-2">Daily Totals · Last 7 Days</h3>
                     {loading ? (
                         <div className="h-full flex items-center justify-center text-xs text-slate-400">Loading…</div>
                     ) : (
@@ -207,7 +237,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
                 )}
                 {loading ? (
                     <div className="text-center text-slate-400 py-10">Loading receipts…</div>
-                ) : recentReceipts.length === 0 ? (
+                ) : recentReceipts.length === 0 && !selectedCategory && !selectedDay ? (
                     <div className="text-center text-slate-400 py-10">No transactions in the last 7 days.</div>
                 ) : filteredReceipts.length === 0 ? (
                     <div className="text-center text-slate-400 py-10">No receipts match the selected filters.</div>

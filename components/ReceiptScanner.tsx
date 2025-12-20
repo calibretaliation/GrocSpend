@@ -27,7 +27,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const [error, setError] = useState<string | null>(null);
 
     const { token, authorizedFetch } = useAuth();
-    const { upsert, quickAdd } = useReceipts();
+    const { upsert, quickAdd, saveStates } = useReceipts();
     const { presets, addPreset, removePreset, updatePreset } = useReceiptPresets();
     const { setImage, removeImage } = useReceiptImages();
 
@@ -48,6 +48,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
     const isEditingPreset = isPresetMode && Boolean(editingPresetId);
     const [optimizedImageData, setOptimizedImageData] = useState<string | null>(null);
+    const [showSaveToast, setShowSaveToast] = useState<{ state: 'pending' | 'failed'; receiptId: string } | null>(null);
 
     const normalizeReceiptItems = (source: ReceiptItem[] = []): ReceiptItem[] =>
         source.map(item => ({
@@ -135,6 +136,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             };
         }
 
+
+                        useEffect(() => {
+                            if (!showSaveToast) return;
+                            const timeout = setTimeout(() => setShowSaveToast(null), 2500);
+                            return () => clearTimeout(timeout);
+                        }, [showSaveToast]);
         let active = true;
         void optimizeImageDataUrl(imagePreview).then((result) => {
             if (!isCancelled && active) {
@@ -285,8 +292,10 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
         const pending = quickAdd(receipt);
         resetForm();
         onSaveSuccess();
+        setShowSaveToast({ state: 'pending', receiptId: receipt.id });
         void pending.catch(() => {
             // Errors are handled centrally in the receipts context.
+            setShowSaveToast({ state: 'failed', receiptId: receipt.id });
         });
     };
 
@@ -533,11 +542,13 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
         const pending = quickAdd(finalReceipt);
         resetForm();
         onSaveSuccess();
+        setShowSaveToast({ state: 'pending', receiptId: finalReceipt.id });
         void pending.catch(() => {
             // Error handled within quickAdd via context state.
             if (imageDataForStorage) {
                 removeImage(finalReceipt.id);
             }
+            setShowSaveToast({ state: 'failed', receiptId: finalReceipt.id });
         });
     };
 
@@ -842,6 +853,21 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                         </Button>
                     </div>
                 </div>
+                {showSaveToast && (
+                    <div className="fixed bottom-4 inset-x-0 flex justify-center pointer-events-none">
+                        <div className={`px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 pointer-events-auto ${showSaveToast.state === 'pending' ? 'bg-slate-900 text-white' : 'bg-red-600 text-white'}`}>
+                            {showSaveToast.state === 'pending' ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin" /> Saving receipt…
+                                </>
+                            ) : (
+                                <>
+                                    <X size={16} /> Save failed. Check History to retry.
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
