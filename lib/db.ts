@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS receipts (
   payment_source TEXT NOT NULL,
   tags TEXT[] NOT NULL DEFAULT '{}',
   notes TEXT,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS receipt_items (
@@ -69,8 +70,22 @@ CREATE TABLE IF NOT EXISTS receipt_items (
   unit_price DOUBLE PRECISION NOT NULL,
   regular_price DOUBLE PRECISION,
   total DOUBLE PRECISION NOT NULL,
-  category TEXT NOT NULL
+  category TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  note TEXT
 );
+
+ALTER TABLE receipt_items
+  ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+
+ALTER TABLE receipt_items
+  ADD COLUMN IF NOT EXISTS note TEXT;
+
+ALTER TABLE receipts
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE receipts
+SET updated_at = COALESCE(updated_at, created_at);
 `;
 
 export const initDb = async () => {

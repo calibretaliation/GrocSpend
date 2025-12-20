@@ -8,6 +8,8 @@ export interface ReceiptItem {
   regularPrice?: number;
   total: number;
   category: string;
+  tags: string[];
+  note?: string;
 }
 
 export interface Receipt {
@@ -21,6 +23,7 @@ export interface Receipt {
   tags: string[];
   notes?: string;
   createdAt: number;
+  updatedAt: number;
 }
 
 export interface User {

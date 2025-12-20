@@ -5,7 +5,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import { analyzeReceiptImage } from '../services/geminiService';
 import { OCRResult, Receipt, ReceiptItem } from '../types';
-import { CATEGORIES, PAYMENT_SOURCES } from '../constants';
+import { CATEGORIES, PAYMENT_SOURCES, UNITS } from '../constants';
 import { formatDateInputValue } from '../utils/date';
 import { useAuth } from '../contexts/AuthContext';
 import { useReceipts } from '../contexts/ReceiptsContext';
@@ -37,6 +37,14 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const [customTags, setCustomTags] = useState<string[]>([]);
     const [newTagInput, setNewTagInput] = useState('');
     const [notes, setNotes] = useState('');
+    const [itemTagInputs, setItemTagInputs] = useState<Record<string, string>>({});
+
+    const normalizeReceiptItems = (source: ReceiptItem[] = []): ReceiptItem[] =>
+        source.map(item => ({
+            ...item,
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            note: item.note ?? ''
+        }));
 
     // Load initial data if provided (Editing Mode)
     useEffect(() => {
@@ -45,10 +53,11 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             setMerchant(initialData.merchant);
             setTotal(initialData.totalAmount.toString());
             setDate(initialData.date);
-            setItems(initialData.items);
+            setItems(normalizeReceiptItems(initialData.items));
             setPaymentSource(initialData.paymentSource);
             setCustomTags(initialData.tags.filter(t => !PAYMENT_SOURCES.includes(t as any)));
             setNotes(initialData.notes || '');
+            setItemTagInputs({});
             setOcrData(true); // Show form
         } else {
             // Reset if no initial data
@@ -67,6 +76,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
         setNotes('');
         setOcrData(false);
         setImagePreview(null);
+        setItemTagInputs({});
     };
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,7 +122,7 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                 setCustomTags(prev => [...prev, 'sale']);
             }
 
-            const newItems: ReceiptItem[] = result.items?.map((item, idx) => ({
+            const newItems: ReceiptItem[] = (result.items?.map((item, idx) => ({
                 id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + idx,
                 name: item.name,
                 quantity: item.qty || 1,
@@ -120,8 +130,10 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                 unitPrice: item.price_per_unit || 0,
                 regularPrice: item.regular_price || undefined,
                 total: item.total_price || 0,
-                category: item.category || 'Groceries'
-            })) || [];
+                category: item.category || 'Groceries',
+                tags: item.is_sale ? ['sale'] : [],
+                note: ''
+            })) ?? []);
 
             if (result.total) {
                 const itemsSum = newItems.reduce((sum, item) => sum + item.total, 0);
@@ -134,13 +146,16 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                         unit: 'ea',
                         unitPrice: Number(difference.toFixed(2)),
                         total: Number(difference.toFixed(2)),
-                        category: 'Other'
+                        category: 'Other',
+                        tags: [],
+                        note: ''
                     });
                 }
             }
             
             setItems(newItems);
             setOcrData(true); // Switch to form view
+            setItemTagInputs({});
 
         } catch (err) {
             const message = err instanceof Error ? err.message : null;
@@ -156,15 +171,19 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     }
 
     const handleAddItem = () => {
-        setItems([...items, {
+        const newItem: ReceiptItem = {
             id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
             name: '',
             quantity: 1,
             unit: 'ea',
             unitPrice: 0,
             total: 0,
-            category: 'Groceries'
-        }]);
+            category: 'Groceries',
+            tags: [],
+            note: ''
+        };
+        setItems([...items, newItem]);
+        setItemTagInputs(prev => ({ ...prev, [newItem.id]: '' }));
     };
 
     const handleItemChange = (index: number, field: keyof ReceiptItem, value: any) => {
@@ -183,10 +202,17 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     };
 
     const handleDeleteItem = (index: number) => {
+        const itemId = items[index]?.id;
         const newItems = items.filter((_, i) => i !== index);
         setItems(newItems);
         const newTotal = newItems.reduce((sum, item) => sum + item.total, 0);
         setTotal(newTotal.toFixed(2));
+        if (itemId) {
+            setItemTagInputs(prev => {
+                const { [itemId]: _discard, ...rest } = prev;
+                return rest;
+            });
+        }
     };
 
     const handleAddTag = () => {
@@ -208,17 +234,28 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             return;
         }
 
+        const cleanedItems = items.map(item => {
+            const tagSet = Array.from(new Set((item.tags || []).map(tag => tag.trim()).filter(Boolean)));
+            const note = item.note?.trim();
+            return {
+                ...item,
+                tags: tagSet,
+                note: note && note.length ? note : undefined,
+            };
+        });
+
         const finalReceipt: Receipt = {
             id: id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
             merchant,
             date,
             totalAmount: parseFloat(total) || 0,
             currency: 'USD',
-            items,
+            items: cleanedItems,
             tags: [...customTags, paymentSource],
             notes: notes.trim(),
             paymentSource: paymentSource as any,
-            createdAt: initialData ? initialData.createdAt : Date.now()
+            createdAt: initialData ? initialData.createdAt : Date.now(),
+            updatedAt: Date.now()
         };
 
         if (!token) {
@@ -247,6 +284,30 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             setError(null);
         }
     }
+
+    const handleItemTagInputChange = (itemId: string, value: string) => {
+        setItemTagInputs(prev => ({ ...prev, [itemId]: value }));
+    };
+
+    const handleItemTagAdd = (itemId: string) => {
+        const value = (itemTagInputs[itemId] || '').trim();
+        if (!value) return;
+        setItems(prev => prev.map(item => {
+            if (item.id !== itemId) return item;
+            if (item.tags.includes(value)) {
+                return item;
+            }
+            return { ...item, tags: [...item.tags, value] };
+        }));
+        setItemTagInputs(prev => ({ ...prev, [itemId]: '' }));
+    };
+
+    const handleItemTagRemove = (itemId: string, tag: string) => {
+        setItems(prev => prev.map(item => {
+            if (item.id !== itemId) return item;
+            return { ...item, tags: item.tags.filter(t => t !== tag) };
+        }));
+    };
 
     // Editing / Form View
     if (ocrData) {
@@ -371,11 +432,18 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                                         </div>
                                         <div className="col-span-1">
                                              <label className="text-[10px] text-slate-500 block">Unit</label>
-                                             <input 
+                                             <select
                                                 className="w-full bg-slate-50 rounded px-1"
                                                 value={item.unit}
                                                 onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                                            />
+                                             >
+                                                {UNITS.map(unit => (
+                                                    <option key={unit} value={unit}>{unit}</option>
+                                                ))}
+                                                {!UNITS.includes(item.unit) && item.unit && (
+                                                    <option value={item.unit}>{item.unit}</option>
+                                                )}
+                                             </select>
                                         </div>
                                         <div className="col-span-1">
                                              <label className="text-[10px] text-slate-500 block text-accent">Reg Price</label>
@@ -409,7 +477,57 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                                             onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
                                          >
                                             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                            {!CATEGORIES.includes(item.category) && item.category && (
+                                                <option value={item.category}>{item.category}</option>
+                                            )}
                                          </select>
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <label className="text-[10px] text-slate-500 block uppercase tracking-wide mb-1">Item Tags</label>
+                                        {item.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mb-2">
+                                                {item.tags.map(tag => (
+                                                    <span key={tag} className="bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 border border-primary/20">
+                                                        #{tag}
+                                                        <button type="button" onClick={() => handleItemTagRemove(item.id, tag)} className="hover:text-red-500">
+                                                            <X size={10} />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input
+                                                className="flex-1 bg-slate-50 rounded px-2 py-1 text-xs"
+                                                placeholder="Add tag"
+                                                value={itemTagInputs[item.id] || ''}
+                                                onChange={(e) => handleItemTagInputChange(item.id, e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleItemTagAdd(item.id);
+                                                    }
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleItemTagAdd(item.id)}
+                                                className="px-2 py-1 text-xs bg-slate-800 text-white rounded"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <label className="text-[10px] text-slate-500 block uppercase tracking-wide mb-1">Item Note</label>
+                                        <textarea
+                                            className="w-full bg-slate-50 rounded px-2 py-1 text-xs min-h-[48px]"
+                                            placeholder="Add item note"
+                                            value={item.note || ''}
+                                            onChange={(e) => handleItemChange(idx, 'note', e.target.value)}
+                                        />
                                     </div>
                                 </div>
                             ))}

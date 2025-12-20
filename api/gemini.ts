@@ -16,7 +16,8 @@ You are an advanced OCR expert for grocery receipts. Your task is to extract dat
   *   Extract the **Unit**:
     *   Look for explicit measures (e.g., 1 lb, 2.5 kg, 10 oz, 1 gallon, liter, ml).
     *   If the product name implies a weight (e.g., "Ribeye 1.5lb"), extract "lb" as the unit.
-    *   If no measure is found, default to 'ea' or 'pack'.
+    *   Reason through the context to select the most appropriate standardized unit (ea, pack, bag, box, lb, oz, kg, g, L, mL, dozen, etc.).
+    *   Only default to 'ea' when there is no evidence for a more specific measurement.
   *   **Identify Sales & Discounts**:
     *   Check for keywords like "Savings", "Discount", "Sale", "Reg Price", or "You Save".
     *   If a discount implies a **Regular Price** (higher than paid price), extract that original price into \`regular_price\`.
@@ -96,6 +97,9 @@ export default async function handler(
           },
           {
             text: "Perform OCR on this receipt image. Pay close attention to unit measures (lb, oz) and look for sales/discounts to extract the original regular price.",
+          },
+          {
+            text: "Before answering, explicitly reason about the measurement unit for each line item and choose the best-fitting standardized unit (ea, pack, bag, box, lb, oz, kg, g, L, mL, dozen, etc.).",
           },
         ],
       },

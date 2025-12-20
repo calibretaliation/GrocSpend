@@ -16,4 +16,17 @@ export const CATEGORIES = [
 
 export const PAYMENT_SOURCES = ["Credit", "Debit", "Cash"] as const;
 
-export const UNITS = ["lb", "kg", "oz", "g", "each", "box", "pkg"];
+export const UNITS = [
+  "ea",
+  "each",
+  "pack",
+  "box",
+  "bag",
+  "lb",
+  "oz",
+  "kg",
+  "g",
+  "l",
+  "ml",
+  "dozen"
+];

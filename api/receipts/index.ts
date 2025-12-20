@@ -27,6 +27,7 @@ export default async function handler(
               r.tags,
               r.notes,
               r.created_at,
+              r.updated_at,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -37,7 +38,9 @@ export default async function handler(
                     'unitPrice', i.unit_price,
                     'regularPrice', i.regular_price,
                     'total', i.total,
-                    'category', i.category
+                    'category', i.category,
+                    'tags', i.tags,
+                    'note', i.note
                   )
                 ) FILTER (WHERE i.id IS NOT NULL),
                 '[]'
@@ -60,6 +63,7 @@ export default async function handler(
       tags: row.tags ?? [],
       notes: row.notes ?? undefined,
       createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
       items: (row.items || []).map((item: any) => ({
         id: item.id,
         name: item.name,
@@ -72,6 +76,8 @@ export default async function handler(
             : undefined,
         total: normalizeNumber(item.total),
         category: item.category,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        note: item.note ?? undefined,
       })),
     }));
 
@@ -93,6 +99,7 @@ export default async function handler(
       tags?: string[];
       notes?: string;
       createdAt?: number;
+      updatedAt?: number;
       items?: Array<{
         id?: string;
         name?: string;
@@ -102,6 +109,8 @@ export default async function handler(
         regularPrice?: number | null;
         total?: number;
         category?: string;
+        tags?: string[];
+        note?: string | null;
       }>;
     };
 
@@ -114,13 +123,14 @@ export default async function handler(
     const createdAt = receipt.createdAt
       ? new Date(receipt.createdAt)
       : new Date();
+    const updatedAt = new Date();
 
     const saved = await withTransaction(async (client) => {
       await client.query(
         `INSERT INTO receipts (
             id, user_id, merchant, date, total_amount,
-            currency, payment_source, tags, notes, created_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            currency, payment_source, tags, notes, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (id)
          DO UPDATE SET merchant = EXCLUDED.merchant,
                        date = EXCLUDED.date,
@@ -129,7 +139,8 @@ export default async function handler(
                        payment_source = EXCLUDED.payment_source,
                        tags = EXCLUDED.tags,
                        notes = EXCLUDED.notes,
-                       created_at = EXCLUDED.created_at
+                       created_at = EXCLUDED.created_at,
+                       updated_at = NOW()
          RETURNING id`,
         [
           receiptId,
@@ -142,6 +153,7 @@ export default async function handler(
           receipt.tags || [],
           receipt.notes ?? null,
           createdAt,
+          updatedAt,
         ]
       );
 
@@ -154,12 +166,14 @@ export default async function handler(
         const insertValues: any[] = [];
         const valueStrings: string[] = [];
         items.forEach((item, idx) => {
-          const base = idx * 9;
+          const base = idx * 11;
           const itemId = item.id || randomUUID();
           valueStrings.push(
             `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${
               base + 5
-            }, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9})`
+            }, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${
+              base + 10
+            }, $${base + 11})`
           );
           insertValues.push(
             itemId,
@@ -170,14 +184,16 @@ export default async function handler(
             item.unitPrice ?? 0,
             item.regularPrice ?? null,
             item.total ?? 0,
-            item.category || "Other"
+            item.category || "Other",
+            Array.isArray(item.tags) ? item.tags : [],
+            item.note ?? null
           );
         });
 
         await client.query(
           `INSERT INTO receipt_items (
              id, receipt_id, name, quantity, unit,
-             unit_price, regular_price, total, category
+             unit_price, regular_price, total, category, tags, note
            ) VALUES ${valueStrings.join(",")}`,
           insertValues
         );
@@ -196,6 +212,7 @@ export default async function handler(
               r.tags,
               r.notes,
               r.created_at,
+              r.updated_at,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -206,7 +223,9 @@ export default async function handler(
                     'unitPrice', i.unit_price,
                     'regularPrice', i.regular_price,
                     'total', i.total,
-                    'category', i.category
+                    'category', i.category,
+                    'tags', i.tags,
+                    'note', i.note
                   )
                 ) FILTER (WHERE i.id IS NOT NULL),
                 '[]'
@@ -230,6 +249,7 @@ export default async function handler(
       tags: row.tags ?? [],
       notes: row.notes ?? undefined,
       createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
       items: (row.items || []).map((item: any) => ({
         id: item.id,
         name: item.name,
@@ -242,6 +262,8 @@ export default async function handler(
             : undefined,
         total: normalizeNumber(item.total),
         category: item.category,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        note: item.note ?? undefined,
       })),
     });
     return;

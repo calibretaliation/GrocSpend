@@ -35,6 +35,7 @@ export default async function handler(
               r.tags,
               r.notes,
               r.created_at,
+              r.updated_at,
               COALESCE(
                 json_agg(
                   json_build_object(
@@ -45,7 +46,9 @@ export default async function handler(
                     'unitPrice', i.unit_price,
                     'regularPrice', i.regular_price,
                     'total', i.total,
-                    'category', i.category
+                    'category', i.category,
+                    'tags', i.tags,
+                    'note', i.note
                   )
                 ) FILTER (WHERE i.id IS NOT NULL),
                 '[]'
@@ -74,6 +77,7 @@ export default async function handler(
       tags: row.tags ?? [],
       notes: row.notes ?? undefined,
       createdAt: new Date(row.created_at).getTime(),
+      updatedAt: new Date(row.updated_at).getTime(),
       items: (row.items || []).map((item: any) => ({
         id: item.id,
         name: item.name,
@@ -86,6 +90,8 @@ export default async function handler(
             : undefined,
         total: Number(item.total),
         category: item.category,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        note: item.note ?? undefined,
       })),
     });
     return;
