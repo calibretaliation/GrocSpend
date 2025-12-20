@@ -6,7 +6,7 @@ import { Input } from './Input';
 import { analyzeReceiptImage } from '../services/geminiService';
 import { OCRResult, Receipt, ReceiptItem, ReceiptPreset } from '../types';
 import { CATEGORIES, PAYMENT_SOURCES, UNITS } from '../constants';
-import { formatDateInputValue } from '../utils/date';
+import { formatDateInputValue, isValidDate, parseReceiptDate } from '../utils/date';
 import { useAuth } from '../contexts/AuthContext';
 import { useReceipts } from '../contexts/ReceiptsContext';
 import { useReceiptPresets } from '../contexts/ReceiptPresetsContext';
@@ -352,7 +352,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                     ? result.total.toFixed(2)
                     : ''
             );
-            setDate(result.date || formatDateInputValue(new Date()));
+            const normalizedDate = result.date ? parseReceiptDate(result.date) : null;
+            setDate(
+                normalizedDate && isValidDate(normalizedDate)
+                    ? formatDateInputValue(normalizedDate)
+                    : formatDateInputValue(new Date())
+            );
             
             if (result.payment_method && PAYMENT_SOURCES.includes(result.payment_method as any)) {
                 setPaymentSource(result.payment_method!);
