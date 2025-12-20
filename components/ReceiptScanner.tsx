@@ -136,12 +136,6 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             };
         }
 
-
-                        useEffect(() => {
-                            if (!showSaveToast) return;
-                            const timeout = setTimeout(() => setShowSaveToast(null), 2500);
-                            return () => clearTimeout(timeout);
-                        }, [showSaveToast]);
         let active = true;
         void optimizeImageDataUrl(imagePreview).then((result) => {
             if (!isCancelled && active) {
@@ -154,6 +148,14 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             active = false;
         };
     }, [imagePreview, optimizeImageDataUrl]);
+
+    useEffect(() => {
+        if (!showSaveToast) {
+            return;
+        }
+        const timeout = setTimeout(() => setShowSaveToast(null), 2500);
+        return () => clearTimeout(timeout);
+    }, [showSaveToast]);
 
     // Load initial data if provided (Editing Mode)
     useEffect(() => {
