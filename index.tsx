@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { ReceiptsProvider } from './contexts/ReceiptsContext';
+import { ReceiptPresetsProvider } from './contexts/ReceiptPresetsContext';
+import { ReceiptImagesProvider } from './contexts/ReceiptImagesContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,9 +15,13 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AuthProvider>
-      <ReceiptsProvider>
-        <App />
-      </ReceiptsProvider>
+      <ReceiptPresetsProvider>
+        <ReceiptImagesProvider>
+          <ReceiptsProvider>
+            <App />
+          </ReceiptsProvider>
+        </ReceiptImagesProvider>
+      </ReceiptPresetsProvider>
     </AuthProvider>
   </React.StrictMode>
 );

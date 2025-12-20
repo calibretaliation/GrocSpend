@@ -26,6 +26,18 @@ export interface Receipt {
   updatedAt: number;
 }
 
+export interface ReceiptPreset {
+  id: string;
+  name: string;
+  merchant: string;
+  totalAmount: number;
+  currency: string;
+  paymentSource: Receipt['paymentSource'];
+  items: ReceiptItem[];
+  tags: string[];
+  notes?: string;
+}
+
 export interface User {
   id: string;
   username: string;

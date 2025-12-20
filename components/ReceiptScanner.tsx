@@ -1,14 +1,16 @@
-
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, Save, Plus, Trash2, Loader2, ScanLine } from 'lucide-react';
+﻿
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Camera, Upload, X, Save, Plus, Trash2, Loader2, ScanLine, BookmarkPlus, Pencil } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import { analyzeReceiptImage } from '../services/geminiService';
-import { OCRResult, Receipt, ReceiptItem } from '../types';
+import { OCRResult, Receipt, ReceiptItem, ReceiptPreset } from '../types';
 import { CATEGORIES, PAYMENT_SOURCES, UNITS } from '../constants';
 import { formatDateInputValue } from '../utils/date';
 import { useAuth } from '../contexts/AuthContext';
 import { useReceipts } from '../contexts/ReceiptsContext';
+import { useReceiptPresets } from '../contexts/ReceiptPresetsContext';
+import { useReceiptImages } from '../contexts/ReceiptImagesContext';
 
 interface ReceiptScannerProps {
     onSaveSuccess: () => void;
@@ -25,7 +27,9 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const [error, setError] = useState<string | null>(null);
 
     const { token, authorizedFetch } = useAuth();
-    const { upsert } = useReceipts();
+    const { upsert, quickAdd } = useReceipts();
+    const { presets, addPreset, removePreset, updatePreset } = useReceiptPresets();
+    const { setImage, removeImage } = useReceiptImages();
 
     // Form states
     const [id, setId] = useState<string>('');
@@ -38,6 +42,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     const [newTagInput, setNewTagInput] = useState('');
     const [notes, setNotes] = useState('');
     const [itemTagInputs, setItemTagInputs] = useState<Record<string, string>>({});
+    const [isPresetMode, setIsPresetMode] = useState(false);
+    const [presetName, setPresetName] = useState('');
+    const [presetError, setPresetError] = useState<string | null>(null);
+    const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+    const isEditingPreset = isPresetMode && Boolean(editingPresetId);
+    const [optimizedImageData, setOptimizedImageData] = useState<string | null>(null);
 
     const normalizeReceiptItems = (source: ReceiptItem[] = []): ReceiptItem[] =>
         source.map(item => ({
@@ -45,6 +55,98 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             tags: Array.isArray(item.tags) ? item.tags : [],
             note: item.note ?? ''
         }));
+
+    const clonePresetItems = (source: ReceiptItem[] = []): ReceiptItem[] =>
+        normalizeReceiptItems(source).map((item, index) => ({
+            ...item,
+            id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${index}`
+        }));
+
+    const buildReceiptFromPreset = (preset: ReceiptPreset): Receipt => {
+        const itemsFromPreset = clonePresetItems(preset.items);
+        const normalizedTotal = Number.isFinite(Number(preset.totalAmount))
+            ? Number(Number(preset.totalAmount).toFixed(2))
+            : 0;
+        const note = preset.notes?.trim();
+        const combinedTags = Array.from(
+            new Set([
+                ...(preset.tags || []).map(tag => tag.trim()).filter(Boolean),
+                preset.paymentSource
+            ])
+        );
+
+        return {
+            id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+            merchant: preset.merchant,
+            date: formatDateInputValue(new Date()),
+            totalAmount: normalizedTotal,
+            currency: preset.currency || 'USD',
+            paymentSource: preset.paymentSource,
+            items: itemsFromPreset,
+            tags: combinedTags,
+            notes: note && note.length ? note : undefined,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+    };
+
+    const optimizeImageDataUrl = useCallback(async (dataUrl: string): Promise<string> => {
+        return new Promise((resolve) => {
+            const image = new Image();
+            image.onload = () => {
+                try {
+                    const maxDimension = 1280;
+                    let { width, height } = image;
+                    let targetWidth = width;
+                    let targetHeight = height;
+
+                    if (width > maxDimension || height > maxDimension) {
+                        const scale = Math.min(maxDimension / width, maxDimension / height);
+                        targetWidth = Math.round(width * scale);
+                        targetHeight = Math.round(height * scale);
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = targetWidth;
+                    canvas.height = targetHeight;
+                    const context = canvas.getContext('2d');
+                    if (!context) {
+                        resolve(dataUrl);
+                        return;
+                    }
+                    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+                    const optimized = canvas.toDataURL('image/webp', 0.75);
+                    resolve(optimized.length < dataUrl.length ? optimized : dataUrl);
+                } catch (error) {
+                    resolve(dataUrl);
+                }
+            };
+            image.onerror = () => resolve(dataUrl);
+            image.src = dataUrl;
+        });
+    }, []);
+
+    useEffect(() => {
+        let isCancelled = false;
+        if (!imagePreview) {
+            setOptimizedImageData(null);
+            return () => {
+                isCancelled = true;
+            };
+        }
+
+        let active = true;
+        void optimizeImageDataUrl(imagePreview).then((result) => {
+            if (!isCancelled && active) {
+                setOptimizedImageData(result);
+            }
+        });
+
+        return () => {
+            isCancelled = true;
+            active = false;
+        };
+    }, [imagePreview, optimizeImageDataUrl]);
 
     // Load initial data if provided (Editing Mode)
     useEffect(() => {
@@ -59,13 +161,17 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             setNotes(initialData.notes || '');
             setItemTagInputs({});
             setOcrData(true); // Show form
+            setIsPresetMode(false);
+            setPresetName('');
+            setPresetError(null);
+            setEditingPresetId(null);
         } else {
             // Reset if no initial data
             resetForm();
         }
     }, [initialData]);
 
-    const resetForm = () => {
+    const clearFormValues = () => {
         setId('');
         setMerchant('');
         setTotal('');
@@ -74,9 +180,134 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
         setPaymentSource('Credit');
         setCustomTags([]);
         setNotes('');
+        setItemTagInputs({});
+        setNewTagInput('');
+    };
+
+    const resetForm = () => {
+        clearFormValues();
         setOcrData(false);
         setImagePreview(null);
+        setIsPresetMode(false);
+        setPresetName('');
+        setPresetError(null);
+        setEditingPresetId(null);
+        setError(null);
+        setOptimizedImageData(null);
+    };
+
+    const beginPresetCreate = () => {
+        clearFormValues();
+        setPresetName('');
+        setPresetError(null);
+        setEditingPresetId(null);
+        setIsPresetMode(true);
+        setDate(formatDateInputValue(new Date()));
+        setOcrData(true);
+        setImagePreview(null);
+        setError(null);
+        setOptimizedImageData(null);
+    };
+
+    const loadPresetIntoForm = (preset: ReceiptPreset) => {
+        setId('');
+        setMerchant(preset.merchant);
+        setTotal(preset.totalAmount.toFixed(2));
+        setDate(formatDateInputValue(new Date()));
+        setItems(clonePresetItems(preset.items));
+        setPaymentSource(preset.paymentSource);
+        setCustomTags([...preset.tags]);
+        setNotes(preset.notes || '');
         setItemTagInputs({});
+        setNewTagInput('');
+        setImagePreview(null);
+        setError(null);
+    };
+
+    const handlePresetSave = () => {
+        const trimmedName = presetName.trim();
+        const trimmedMerchant = merchant.trim();
+
+        setPresetError(null);
+
+        if (!trimmedName) {
+            setPresetError('Preset name is required');
+            return;
+        }
+
+        if (!trimmedMerchant) {
+            setPresetError('Merchant is required before saving a preset');
+            return;
+        }
+
+        const parsedTotal = parseFloat(total);
+        const computedTotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+        const safeTotal = Number.isFinite(parsedTotal) ? parsedTotal : Number(computedTotal.toFixed(2));
+        const uniqueTags = Array.from(new Set(customTags.map(tag => tag.trim()).filter(Boolean)));
+
+        try {
+            const presetPayload: Omit<ReceiptPreset, 'id'> = {
+                name: trimmedName,
+                merchant: trimmedMerchant,
+                totalAmount: Number.isFinite(safeTotal) ? Number(safeTotal.toFixed(2)) : 0,
+                currency: 'USD',
+                paymentSource: paymentSource as Receipt['paymentSource'],
+                items: normalizeReceiptItems(items).map(item => ({ ...item })),
+                tags: uniqueTags,
+                notes: notes.trim() ? notes.trim() : undefined
+            };
+
+            if (editingPresetId) {
+                updatePreset({ ...presetPayload, id: editingPresetId });
+            } else {
+                addPreset(presetPayload);
+            }
+            resetForm();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to save preset';
+            setPresetError(message);
+        }
+    };
+
+    const handleUsePreset = (preset: ReceiptPreset) => {
+        if (!token) {
+            setError('Please log in to save receipts.');
+            return;
+        }
+
+        setIsPresetMode(false);
+        setEditingPresetId(null);
+        setPresetName('');
+        setPresetError(null);
+        setError(null);
+
+        const receipt = buildReceiptFromPreset(preset);
+        const pending = quickAdd(receipt);
+        resetForm();
+        onSaveSuccess();
+        void pending.catch(() => {
+            // Errors are handled centrally in the receipts context.
+        });
+    };
+
+    const handlePresetEdit = (preset: ReceiptPreset) => {
+        setIsPresetMode(true);
+        setEditingPresetId(preset.id);
+        setPresetName(preset.name);
+        setPresetError(null);
+        loadPresetIntoForm(preset);
+        setOcrData(true);
+    };
+
+    const handlePresetRemove = (presetId: string) => {
+        const wasEditing = editingPresetId === presetId;
+        if (wasEditing) {
+            setEditingPresetId(null);
+        }
+        removePreset(presetId);
+        if (isPresetMode && wasEditing) {
+            resetForm();
+        }
     };
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,6 +385,10 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             }
             
             setItems(newItems);
+            setIsPresetMode(false);
+            setEditingPresetId(null);
+            setPresetName('');
+            setPresetError(null);
             setOcrData(true); // Switch to form view
             setItemTagInputs({});
 
@@ -166,9 +401,17 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     };
 
     const handleManualEntry = () => {
-         setDate(formatDateInputValue(new Date()));
-         setOcrData(true);
-    }
+        setIsPresetMode(false);
+        setEditingPresetId(null);
+        setPresetName('');
+        setPresetError(null);
+        clearFormValues();
+        setDate(formatDateInputValue(new Date()));
+        setOcrData(true);
+        setImagePreview(null);
+        setError(null);
+        setOptimizedImageData(null);
+    };
 
     const handleAddItem = () => {
         const newItem: ReceiptItem = {
@@ -244,15 +487,19 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             };
         });
 
+        const isExisting = Boolean(id);
+        const uniqueTags = Array.from(new Set([...customTags.map(tag => tag.trim()).filter(Boolean), paymentSource]));
+        const imageDataForStorage = optimizedImageData || imagePreview;
+
         const finalReceipt: Receipt = {
             id: id || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
-            merchant,
+            merchant: merchant.trim(),
             date,
             totalAmount: parseFloat(total) || 0,
             currency: 'USD',
             items: cleanedItems,
-            tags: [...customTags, paymentSource],
-            notes: notes.trim(),
+            tags: uniqueTags,
+            notes: notes.trim() ? notes.trim() : undefined,
             paymentSource: paymentSource as any,
             createdAt: initialData ? initialData.createdAt : Date.now(),
             updatedAt: Date.now()
@@ -263,25 +510,42 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             return;
         }
 
-        setIsSaving(true);
-        try {
-            await upsert(finalReceipt);
-            onSaveSuccess();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : null;
-            setError(message || "Failed to save receipt. Please try again.");
-        } finally {
-            setIsSaving(false);
+        if (isExisting) {
+            setIsSaving(true);
+            try {
+                await upsert(finalReceipt);
+                if (imageDataForStorage) {
+                    setImage(finalReceipt.id, imageDataForStorage);
+                }
+                onSaveSuccess();
+            } catch (err) {
+                const message = err instanceof Error ? err.message : null;
+                setError(message || "Failed to save receipt. Please try again.");
+            } finally {
+                setIsSaving(false);
+            }
+            return;
         }
+
+        if (imageDataForStorage) {
+            setImage(finalReceipt.id, imageDataForStorage);
+        }
+        const pending = quickAdd(finalReceipt);
+        resetForm();
+        onSaveSuccess();
+        void pending.catch(() => {
+            // Error handled within quickAdd via context state.
+            if (imageDataForStorage) {
+                removeImage(finalReceipt.id);
+            }
+        });
     };
 
     const cancelEdit = () => {
+        resetForm();
+        setError(null);
         if (onCancel) {
             onCancel();
-        } else {
-            setOcrData(false);
-            setImagePreview(null);
-            setError(null);
         }
     }
 
@@ -313,8 +577,12 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
     if (ocrData) {
         return (
             <div className="p-4 pb-24">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">{initialData ? 'Edit Receipt' : 'New Receipt'}</h2>
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+                    <h2 className="text-2xl font-bold">
+                        {isPresetMode
+                            ? (isEditingPreset ? 'Edit Preset' : 'New Preset')
+                            : initialData ? 'Edit Receipt' : 'New Receipt'}
+                    </h2>
                     <Button variant="ghost" onClick={cancelEdit}>
                         <X />
                     </Button>
@@ -330,6 +598,20 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
                 )}
 
                 <div className="space-y-4">
+                    {isPresetMode && (
+                        <Input
+                            label="Preset name"
+                            value={presetName}
+                            onChange={e => {
+                                setPresetName(e.target.value);
+                                if (presetError) {
+                                    setPresetError(null);
+                                }
+                            }}
+                            placeholder="e.g. Monthly rent"
+                            error={presetError ?? undefined}
+                        />
+                    )}
                     <Input label="Merchant" value={merchant} onChange={e => setMerchant(e.target.value)} placeholder="e.g. Costco" />
                     
                     <div className="grid grid-cols-2 gap-4">
@@ -536,9 +818,27 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
 
                     <div className="pt-4 sticky bottom-0 bg-slate-50 pb-4">
                         {error && <p className="text-red-500 text-sm mb-2 text-center">{error}</p>}
-                        <Button fullWidth onClick={() => void handleSave()} disabled={isSaving} className="shadow-lg shadow-primary/30">
+                        <Button
+                            type="button"
+                            fullWidth
+                            onClick={() => {
+                                if (isPresetMode) {
+                                    handlePresetSave();
+                                } else {
+                                    void handleSave();
+                                }
+                            }}
+                            disabled={!isPresetMode && isSaving}
+                            className="shadow-lg shadow-primary/30"
+                        >
                             <Save size={18} className="inline mr-2" />
-                            {isSaving ? 'Saving...' : initialData ? 'Update Receipt' : 'Save Receipt'}
+                            {isPresetMode
+                                ? 'Save Preset'
+                                : isSaving
+                                    ? 'Saving...'
+                                    : initialData
+                                        ? 'Update Receipt'
+                                        : 'Save Receipt'}
                         </Button>
                     </div>
                 </div>
@@ -552,69 +852,133 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({ onSaveSuccess, o
             <h2 className="text-2xl font-bold mb-8">Add New Receipt</h2>
             
             {!imagePreview ? (
-                <div className="w-full space-y-4">
-                    <div className="relative">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={handleFileSelect}
-                            className="hidden"
-                        />
-                        <Button 
-                            onClick={() => fileInputRef.current?.click()} 
-                            fullWidth 
-                            className="h-32 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-primary bg-primary/5 hover:bg-primary/10 text-primary"
-                        >
-                            <Camera size={32} />
-                            <span>Scan with Camera</span>
-                        </Button>
-                    </div>
-                    
-                    <div className="relative">
-                         <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileSelect}
-                            className="hidden"
-                            id="upload-file"
-                        />
+                <div className="w-full space-y-6">
+                    {error && (
+                        <div className="bg-red-50 text-red-600 border border-red-100 rounded-lg px-3 py-2 text-sm text-left">
+                            {error}
+                        </div>
+                    )}
+                    {presets.length > 0 && (
+                        <div className="w-full text-left">
+                            <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">Quick receipts</h3>
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                                {presets.map(preset => (
+                                    <div key={preset.id} className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleUsePreset(preset)}
+                                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                        >
+                                            <div className="text-sm font-semibold text-slate-800 truncate">
+                                                {preset.name}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                ${preset.totalAmount.toFixed(2)}
+                                            </div>
+                                        </button>
+                                        <div className="absolute top-1.5 right-1.5 flex gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    handlePresetEdit(preset);
+                                                }}
+                                                className="rounded-full bg-white/90 p-1 text-slate-400 shadow hover:text-primary"
+                                                aria-label={`Edit ${preset.name}`}
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    handlePresetRemove(preset.id);
+                                                }}
+                                                className="rounded-full bg-white/90 p-1 text-slate-400 shadow hover:text-red-500"
+                                                aria-label={`Remove ${preset.name}`}
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <div className="relative">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+                            <Button 
+                                onClick={() => fileInputRef.current?.click()} 
+                                fullWidth 
+                                className="h-32 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-primary bg-primary/5 hover:bg-primary/10 text-primary"
+                            >
+                                <Camera size={32} />
+                                <span>Scan with Camera</span>
+                            </Button>
+                        </div>
+                        
+                        <div className="relative">
+                             <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                                id="upload-file"
+                            />
+                             <Button 
+                                variant="secondary"
+                                fullWidth 
+                                onClick={() => document.getElementById('upload-file')?.click()}
+                                className="flex items-center justify-center gap-2"
+                            >
+                                <Upload size={18} />
+                                <span>Upload from Gallery</span>
+                            </Button>
+                        </div>
+
+                        <div className="relative pt-4">
+                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                <div className="w-full border-t border-slate-200"></div>
+                            </div>
+                            <div className="relative flex justify-center">
+                                <span className="px-2 bg-slate-50 text-sm text-slate-400">or</span>
+                            </div>
+                        </div>
+
                          <Button 
-                            variant="secondary"
+                            variant="ghost"
                             fullWidth 
-                            onClick={() => document.getElementById('upload-file')?.click()}
+                            onClick={handleManualEntry}
+                            className="text-slate-500"
+                        >
+                            Enter Manually
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            fullWidth
+                            onClick={beginPresetCreate}
                             className="flex items-center justify-center gap-2"
                         >
-                            <Upload size={18} />
-                            <span>Upload from Gallery</span>
+                            <BookmarkPlus size={18} />
+                            <span>Add preset</span>
                         </Button>
                     </div>
-
-                    <div className="relative pt-4">
-                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                            <div className="w-full border-t border-slate-200"></div>
-                        </div>
-                        <div className="relative flex justify-center">
-                            <span className="px-2 bg-slate-50 text-sm text-slate-400">or</span>
-                        </div>
-                    </div>
-
-                     <Button 
-                        variant="ghost"
-                        fullWidth 
-                        onClick={handleManualEntry}
-                        className="text-slate-500"
-                    >
-                        Enter Manually
-                    </Button>
                 </div>
             ) : (
                 <div className="w-full max-w-sm">
                     <div className="rounded-xl overflow-hidden shadow-lg mb-6 border border-slate-200 relative">
                         <img src={imagePreview} alt="Preview" className="w-full max-h-[60vh] object-contain bg-black" />
                         <button 
-                            onClick={() => { setImagePreview(null); setError(null); }}
+                            onClick={() => { setImagePreview(null); setOptimizedImageData(null); setError(null); }}
                             className="absolute top-2 right-2 bg-black/60 text-white p-2 rounded-full hover:bg-black/80"
                         >
                             <X size={16} />

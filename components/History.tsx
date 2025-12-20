@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 import type { DateRange } from 'react-day-picker';
 import { Receipt } from '../types';
-import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Pencil, Tag, StickyNote, ChevronRight } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Trash2, Calendar, Pencil, Tag, StickyNote, ChevronRight, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { formatDateInputValue, formatReceiptDisplayDate, isValidDate, parseReceiptDate } from '../utils/date';
 import { useReceipts } from '../contexts/ReceiptsContext';
+import { useReceiptImages } from '../contexts/ReceiptImagesContext';
 import 'react-day-picker/dist/style.css';
 
 interface HistoryProps {
@@ -62,7 +63,8 @@ const highlightText = (text: string, term: string): React.ReactNode => {
 };
 
 export const History: React.FC<HistoryProps> = ({ onEdit }) => {
-    const { receipts, loading, remove, error } = useReceipts();
+    const { receipts, loading, remove: removeReceipt, error, saveStates, retrySave } = useReceipts();
+    const { removeImage, getImage } = useReceiptImages();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterDate, setFilterDate] = useState<'all' | 'month' | 'week' | 'custom'>('all');
     const [customRange, setCustomRange] = useState<DateRange | undefined>();
@@ -71,6 +73,7 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
     const [sortOption, setSortOption] = useState<'added' | 'updated' | 'date'>('added');
     const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
     const [highlightedItem, setHighlightedItem] = useState<HighlightedItem | null>(null);
+    const [viewingImage, setViewingImage] = useState<{ receiptId: string; data: string } | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
     const receiptRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -213,6 +216,16 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
         return filteredReceipts.filter(receipt => receipt.merchant.toLowerCase().includes(lowerTerm));
     }, [filteredReceipts, isSearching, searchTermTrimmed]);
 
+    const pendingCount = useMemo(
+        () => Object.values(saveStates).filter(state => state === 'pending').length,
+        [saveStates]
+    );
+
+    const failedCount = useMemo(
+        () => Object.values(saveStates).filter(state => state === 'failed').length,
+        [saveStates]
+    );
+
     const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!confirm('Are you sure you want to delete this receipt?')) {
@@ -220,11 +233,23 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
         }
 
         try {
-            await remove(id);
+            await removeReceipt(id);
+            removeImage(id);
             setActionError(null);
         } catch (err) {
             const message = err instanceof Error ? err.message : null;
             setActionError(message || 'Failed to delete receipt. Please try again.');
+        }
+    };
+
+    const handleRetrySave = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await retrySave(id);
+            setActionError(null);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : null;
+            setActionError(message || 'Failed to retry save. Please try again.');
         }
     };
 
@@ -254,6 +279,7 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
 
     const renderReceiptCard = (receipt: Receipt, highlightTerm?: string) => {
         const isExpanded = expandedReceiptId === receipt.id;
+        const originalImageData = getImage(receipt.id);
         const hasHighlight = Boolean(highlightTerm);
         const normalizedHighlight = highlightTerm?.toLowerCase() ?? '';
 
@@ -385,7 +411,18 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
                             {receipt.items.map((item, idx) => renderItemContent(item, idx))}
                         </div>
 
-                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
+                        <div className="flex justify-end gap-3 pt-2 border-t border-slate-200 flex-wrap">
+                            {originalImageData && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setViewingImage({ receiptId: receipt.id, data: originalImageData });
+                                    }}
+                                    className="text-slate-600 text-xs flex items-center hover:text-slate-800 font-medium"
+                                >
+                                    <ImageIcon size={14} className="mr-1" /> View original
+                                </button>
+                            )}
                             {onEdit && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onEdit(receipt); }}
@@ -408,6 +445,7 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
     };
 
     return (
+        <>
         <div className="flex flex-col h-full bg-slate-50">
             <div className="bg-white p-4 shadow-sm z-10 sticky top-0">
                 <h2 className="text-2xl font-bold mb-4">History</h2>
@@ -594,5 +632,31 @@ export const History: React.FC<HistoryProps> = ({ onEdit }) => {
                 )}
             </div>
         </div>
+        {viewingImage && (
+            <div
+                className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+                onClick={() => setViewingImage(null)}
+            >
+                <div
+                    className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <button
+                        onClick={() => setViewingImage(null)}
+                        className="absolute top-3 right-3 text-white/80 hover:text-white bg-black/40 rounded-full p-2"
+                    >
+                        <X size={18} />
+                    </button>
+                    <div className="bg-slate-900 flex items-center justify-center h-full">
+                        <img
+                            src={viewingImage.data}
+                            alt={`Original receipt ${viewingImage.receiptId}`}
+                            className="max-h-[85vh] w-auto object-contain"
+                        />
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 };
