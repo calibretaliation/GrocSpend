@@ -26,7 +26,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
         return { start, end };
     }, []);
 
-    const rangeLabel = useMemo(() => 'Last 7 Days', []);
+    const rangeLabel = useMemo(() => 'This Month', []);
 
     const recentReceipts = useMemo(() => {
         const { start, end } = recentRange;
@@ -107,7 +107,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
         });
     }, [receipts, selectedCategory, selectedDay, recentRange, monthRange]);
 
-    const totalSpentInRange = recentReceipts.reduce((sum, r) => sum + r.totalAmount, 0);
+    const totalSpentThisMonth = monthReceipts.reduce((sum, r) => sum + r.totalAmount, 0);
 
     const handleCategorySelect = (category: string) => {
         setSelectedCategory(prev => (prev === category ? null : category));
@@ -126,7 +126,7 @@ export const Dashboard: React.FC<{ onViewDetails: (id: string) => void }> = ({ o
     <div className="flex flex-col h-full">
         {/* Upper Fold (Charts) - Fixed Height approx 40% */}
         <div className="bg-white p-4 pb-2 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-slate-800 mb-2">{rangeLabel}: ${totalSpentInRange.toFixed(2)}</h2>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">{rangeLabel}: ${totalSpentThisMonth.toFixed(2)}</h2>
             {(selectedCategory || selectedDay) && (
                 <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
                     <span className="font-semibold uppercase tracking-tight">Active Filters:</span>
