@@ -27,6 +27,7 @@ const createResponse = () => {
         headers: {},
         setHeader(key: string, value: string) {
             this.headers[key] = value;
+            return this as unknown as VercelResponse;
         },
         status(code: number) {
             this.statusCode = code;
