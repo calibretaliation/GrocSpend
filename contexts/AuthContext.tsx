@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import type { User } from "../types";
+import { DEV_USER, DEV_TOKEN } from "../services/devData";
 
 export type AuthorizedFetch = (
   input: RequestInfo | URL,
@@ -32,7 +33,12 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "smart_spend_session";
 
+const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === "true";
+
 const readStoredSession = (): SessionData | null => {
+  if (IS_DEV_MODE) {
+    return { token: DEV_TOKEN, user: DEV_USER };
+  }
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;

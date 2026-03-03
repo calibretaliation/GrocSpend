@@ -9,6 +9,9 @@ import React, {
 import type { Receipt } from "../types";
 import { getReceipts, saveReceipt, deleteReceipt } from "../services/storageService";
 import { useAuth } from "./AuthContext";
+import { DEV_RECEIPTS } from "../services/devData";
+
+const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === "true";
 
 interface ReceiptsContextValue {
   receipts: Receipt[];
@@ -42,6 +45,13 @@ export const ReceiptsProvider: React.FC<{ children: React.ReactNode }> = ({
   const [drafts, setDrafts] = useState<Record<string, Receipt>>({});
 
   const refresh = useCallback(async () => {
+    if (IS_DEV_MODE) {
+      setReceipts(DEV_RECEIPTS);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     if (!token) {
       setReceipts([]);
       setLoading(false);

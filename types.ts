@@ -66,7 +66,14 @@ export enum ViewState {
   DASHBOARD = 'DASHBOARD',
   SCAN = 'SCAN',
   CONVERTER = 'CONVERTER',
-  HISTORY = 'HISTORY'
+  HISTORY = 'HISTORY',
+  PRICE_HISTORY = 'PRICE_HISTORY',
+  SETTINGS = 'SETTINGS'
+}
+
+export interface BudgetConfig {
+  monthlyBudget: number;
+  categoryBudgets: Record<string, number>;
 }
 
 export interface ExchangeRateConfig {

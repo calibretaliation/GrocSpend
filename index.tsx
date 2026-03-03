@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ReceiptsProvider } from './contexts/ReceiptsContext';
 import { ReceiptPresetsProvider } from './contexts/ReceiptPresetsContext';
 import { ReceiptImagesProvider } from './contexts/ReceiptImagesContext';
+import { BudgetProvider } from './contexts/BudgetContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -18,7 +19,9 @@ root.render(
       <ReceiptPresetsProvider>
         <ReceiptImagesProvider>
           <ReceiptsProvider>
-            <App />
+            <BudgetProvider>
+              <App />
+            </BudgetProvider>
           </ReceiptsProvider>
         </ReceiptImagesProvider>
       </ReceiptPresetsProvider>

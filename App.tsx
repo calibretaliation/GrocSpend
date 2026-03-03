@@ -5,6 +5,8 @@ import { Dashboard } from './components/Dashboard';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { Converter } from './components/Converter';
 import { History } from './components/History';
+import { PriceHistory } from './components/PriceHistory';
+import { Settings } from './components/Settings';
 import { useAuth } from './contexts/AuthContext';
 import { AuthScreen } from './components/AuthScreen';
 import { Loader2 } from 'lucide-react';
@@ -35,8 +37,8 @@ export default function App() {
   };
 
   const handleViewDetails = (id: string) => {
-      // Logic to jump to history view
-      setCurrentView(ViewState.HISTORY);
+    // Logic to jump to history view
+    setCurrentView(ViewState.HISTORY);
   };
 
   const handleEditReceipt = (receipt: Receipt) => {
@@ -48,7 +50,7 @@ export default function App() {
     setEditingReceipt(null);
     // If we were editing, go back to history, otherwise just stay (or could go dashboard)
     if (editingReceipt) {
-        setCurrentView(ViewState.HISTORY);
+      setCurrentView(ViewState.HISTORY);
     }
   }
 
@@ -58,16 +60,20 @@ export default function App() {
         return <Dashboard onViewDetails={handleViewDetails} />;
       case ViewState.SCAN:
         return (
-            <ReceiptScanner 
-                initialData={editingReceipt} 
-                onSaveSuccess={handleScanSuccess}
-                onCancel={handleCancelEdit}
-            />
+          <ReceiptScanner
+            initialData={editingReceipt}
+            onSaveSuccess={handleScanSuccess}
+            onCancel={handleCancelEdit}
+          />
         );
       case ViewState.CONVERTER:
         return <Converter />;
       case ViewState.HISTORY:
         return <History onEdit={handleEditReceipt} />;
+      case ViewState.PRICE_HISTORY:
+        return <PriceHistory />;
+      case ViewState.SETTINGS:
+        return <Settings onBack={() => setCurrentView(ViewState.DASHBOARD)} />;
       default:
         return <Dashboard onViewDetails={handleViewDetails} />;
     }

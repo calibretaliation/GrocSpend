@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, ScanLine, Calculator, History, LogOut, UserCircle } from 'lucide-react';
+import { LayoutDashboard, ScanLine, Calculator, History, TrendingUp, LogOut, UserCircle, Settings } from 'lucide-react';
 import { ViewState } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './Button';
@@ -18,6 +18,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView }
     { view: ViewState.SCAN, label: 'Scan', icon: ScanLine },
     { view: ViewState.CONVERTER, label: 'Convert', icon: Calculator },
     { view: ViewState.HISTORY, label: 'History', icon: History },
+    { view: ViewState.PRICE_HISTORY, label: 'Prices', icon: TrendingUp },
   ];
 
   const handleLogout = async () => {
@@ -46,15 +47,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView }
                   <p className="text-sm font-semibold text-slate-700">{user.username}</p>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                className="flex items-center gap-2 text-slate-500 hover:text-slate-700"
-                onClick={() => void handleLogout()}
-                disabled={isLoggingOut}
-              >
-                <LogOut size={16} />
-                {isLoggingOut ? 'Logging out…' : 'Log out'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setView(ViewState.SETTINGS)}
+                  className="flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                  title="Settings"
+                >
+                  <Settings size={18} />
+                </button>
+                <Button
+                  variant="ghost"
+                  className="flex items-center gap-2 text-slate-500 hover:text-slate-700"
+                  onClick={() => void handleLogout()}
+                  disabled={isLoggingOut}
+                >
+                  <LogOut size={16} />
+                  {isLoggingOut ? 'Logging out…' : 'Log out'}
+                </Button>
+              </div>
             </header>
           )}
           {children}
@@ -71,9 +81,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, setView }
               <button
                 key={item.view}
                 onClick={() => setView(item.view)}
-                className={`flex flex-col items-center justify-center py-3 w-full transition-colors ${
-                  isActive ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
-                }`}
+                className={`flex flex-col items-center justify-center py-3 w-full transition-colors ${isActive ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
+                  }`}
               >
                 <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                 <span className="text-[10px] mt-1 font-medium">{item.label}</span>
