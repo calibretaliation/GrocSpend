@@ -23,8 +23,10 @@ interface PricePoint {
 }
 
 interface ItemAggregate {
-    key: string;          // lowercase trimmed name
+    key: string;          // lowercase "name::unit"
+    nameKey: string;      // lowercase name only (for search)
     displayName: string;  // first-seen casing
+    unit: string;         // normalized unit
     points: PricePoint[];
     avgPrice: number;
     latestPrice: number;
@@ -38,6 +40,13 @@ interface ItemAggregate {
 
 /* ─── helpers ──────────────────────────────────── */
 const normalizeItemName = (name: string) => name.trim().toLowerCase();
+const normalizeUnit = (unit: string) => unit.trim().toLowerCase().replace(/\.$/, '');
+const makeItemKey = (name: string, unit: string) => `${normalizeItemName(name)}::${normalizeUnit(unit)}`;
+const formatUnit = (unit: string) => {
+    const u = normalizeUnit(unit);
+    if (!u || u === 'ea' || u === 'each') return '';
+    return ` (per ${u})`;
+};
 
 const MERCHANT_COLORS = [
     '#0ea5e9', '#f43f5e', '#10b981', '#f59e0b',
@@ -60,12 +69,16 @@ export const PriceHistory: React.FC = () => {
 
             receipt.items.forEach(item => {
                 if (!item.name?.trim()) return;
-                const key = normalizeItemName(item.name);
+                const key = makeItemKey(item.name, item.unit);
+                const nameKey = normalizeItemName(item.name);
+                const unit = normalizeUnit(item.unit);
 
                 if (!map.has(key)) {
                     map.set(key, {
                         key,
+                        nameKey,
                         displayName: item.name.trim(),
+                        unit,
                         points: [],
                         avgPrice: 0,
                         latestPrice: 0,
@@ -147,11 +160,11 @@ export const PriceHistory: React.FC = () => {
         [itemMap],
     );
 
-    /* Search results */
+    /* Search results — match against name portion, not the unit suffix */
     const searchResults = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) return [];
-        return allItems.filter(a => a.key.includes(term));
+        return allItems.filter(a => a.nameKey.includes(term));
     }, [allItems, searchTerm]);
 
     /* Selected item detail */
@@ -233,7 +246,7 @@ export const PriceHistory: React.FC = () => {
                     </button>
                     <div className="flex items-start justify-between">
                         <div>
-                            <h2 className="text-xl font-bold text-slate-800">{detail.displayName}</h2>
+                            <h2 className="text-xl font-bold text-slate-800">{detail.displayName}{formatUnit(detail.unit)}</h2>
                             <p className="text-xs text-slate-500 mt-1">
                                 {detail.count} purchase{detail.count > 1 ? 's' : ''} · {detail.merchants.size} merchant{detail.merchants.size > 1 ? 's' : ''}
                             </p>
@@ -485,7 +498,7 @@ export const PriceHistory: React.FC = () => {
                                             className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 text-left hover:border-primary/40 hover:shadow-md transition-all"
                                         >
                                             <div className="flex items-start justify-between mb-1.5">
-                                                <p className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2">{agg.displayName}</p>
+                                                <p className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2">{agg.displayName}<span className="text-[10px] text-slate-400 font-normal">{formatUnit(agg.unit)}</span></p>
                                                 <TrendIcon trend={agg.trend} size={12} />
                                             </div>
                                             <div className="flex items-end justify-between mt-2">
@@ -517,7 +530,7 @@ export const PriceHistory: React.FC = () => {
                             >
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-slate-800 truncate">{agg.displayName}</p>
+                                        <p className="text-sm font-medium text-slate-800 truncate">{agg.displayName}<span className="text-[10px] text-slate-400 font-normal">{formatUnit(agg.unit)}</span></p>
                                         <p className="text-[11px] text-slate-400">{agg.count}× · {agg.merchants.size} store{agg.merchants.size > 1 ? 's' : ''}</p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0 ml-3">
